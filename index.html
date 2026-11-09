@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Food & Kindness Coach</title>
+  <style>
+    :root {
+      --bg: #f4f7f2; --card: #fff; --ink: #1e2c25; --muted: #637169;
+      --green: #287152; --soft: #e3f1e7; --line: #d6e3d9; --red: #8b3d3d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 16px; background: var(--bg); color: var(--ink);
+      font: 16px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main { max-width: 760px; margin: auto; }
+    h1 { margin: 8px 0 0; font-size: 1.65rem; }
+    h2 { margin-top: 0; }
+    .subtitle, .small { color: var(--muted); }
+    .card {
+      margin: 14px 0; padding: 18px; background: var(--card);
+      border: 1px solid var(--line); border-radius: 16px;
+    }
+    .hidden { display: none; }
+    .choices, .chat { display: grid; gap: 10px; }
+    .grid { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    button, input, textarea, select {
+      width: 100%; font: inherit; border-radius: 10px;
+    }
+    button {
+      border: 0; padding: 13px; color: #fff; background: var(--green);
+      font-weight: 700; cursor: pointer; text-align: left;
+    }
+    button.secondary { color: var(--ink); background: var(--soft); }
+    button.danger { background: var(--red); }
+    input, textarea, select {
+      border: 1px solid var(--line); padding: 11px; background: #fff; margin: 5px 0 10px;
+    }
+    textarea { min-height: 90px; resize: vertical; }
+    label { display: block; font-weight: 700; margin-top: 9px; }
+    .message {
+      max-width: 92%; padding: 12px 14px; border-radius: 14px; white-space: pre-wrap;
+    }
+    .coach { justify-self: start; background: var(--soft); }
+    .you { justify-self: end; background: #d8efdf; }
+    .avatar-box {
+      display: flex; align-items: center; gap: 14px;
+      background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+      padding: 14px; margin: 12px 0;
+    }
+    .avatar {
+      position: relative; width: 88px; height: 88px; flex: 0 0 88px;
+      border-radius: 50%; display: grid; place-items: center; font-size: 36px;
+      overflow: hidden;
+    }
+    .hair {
+      position: absolute; top: -11px; left: 7px; width: 74px; height: 45px;
+      border-radius: 50% 50% 25% 25%;
+    }
+    .face { z-index: 2; margin-top: 12px; }
+    .shirt {
+      position: absolute; bottom: -23px; left: 13px; width: 62px; height: 45px;
+      border-radius: 50% 50% 0 0;
+    }
+    .reaction {
+      margin: 10px 0; padding: 12px 14px; border-radius: 12px;
+      background: #fff7d7; border: 1px solid #ebdfaa; font-weight: 700;
+    }
+    .badge {
+      display: inline-block; margin: 5px 4px 0 0; padding: 6px 10px;
+      background: #fff7d7; border: 1px solid #ebdfaa; border-radius: 999px;
+      font-size: .9rem;
+    }
+    .food-row, .entry-row {
+      padding: 12px; border: 1px solid var(--line); border-radius: 12px; margin: 10px 0;
+    }
+    .totals { white-space: pre-wrap; line-height: 1.7; }
+    .moods { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+    .moods button { font-size: 1.7rem; text-align: center; padding: 9px; }
+    @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+
+<body>
+<main>
+  <h1>Food & Kindness Coach</h1>
+  <p class="subtitle">Small choices count. You are building proof that you can care for yourself. 🌱</p>
+
+  <div class="avatar-box">
+    <div class="avatar" id="avatar">
+      <div class="hair" id="avatarHair"></div>
+      <div class="face" id="avatarFace">🙂</div>
+      <div class="shirt" id="avatarShirt"></div>
+    </div>
+    <div>
+      <strong id="avatarNameDisplay">Your Coach</strong>
+      <div class="small" id="avatarMessage">Ready for one kind next step? 🌟</div>
+      <div id="badges"></div>
+    </div>
+  </div>
+
+  <section class="card" id="home">
+    <div class="choices">
+      <button onclick="openFoodTracker()">🍽️ Log food</button>
+      <button onclick="showDailySummary()">📊 Today’s nutrition summary</button>
+      <button onclick="showFoodHistory()">📖 Today’s food diary</button>
+      <button onclick="startMoodCheck()">😊 Mood check-in</button>
+      <button onclick="startUrge()">⏸️ I feel like binge eating</button>
+      <button onclick="startThought()">💬 I’m being harsh to myself</button>
+      <button onclick="suggestActivity()">🏠 Suggest a no-tools activity</button>
+      <button class="secondary" onclick="openAvatarSettings()">🎨 Customize avatar</button>
+      <button class="secondary" onclick="openSettings()">⚙️ USDA API settings</button>
+      <button class="secondary" onclick="exportBackup()">⬇️ Download backup</button>
+    </div>
+  </section>
+
+  <section class="card hidden" id="screen">
+    <div id="content"></div>
+    <br>
+    <button class="secondary" onclick="goHome()">← Back to home</button>
+  </section>
+</main>
+
+<script>
+  const API_KEY_STORE = "fkApiKey";
+  const FOOD_STORE = "fkFoodLog";
+  const COACH_STORE = "fkCoachLog";
+  const AVATAR_STORE = "fkAvatar";
+
+  const content = document.getElementById("content");
+
+  function today() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function getData(key, fallback) {
+    return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback));
+  }
+
+  function setData(key, data) {
+    localStorage.setItem(key, JSON.stringify(data));
+  }
+
+  function getAvatar() {
+    return getData(AVATAR_STORE, {
+      name: "Your Coach",
+      skin: "#f0c9a6",
+      hair: "#59351f",
+      shirt: "#287152",
+      face: "🙂"
+    });
+  }
+
+  function renderAvatar(message) {
+    const avatar = getAvatar();
+    document.getElementById("avatar").style.background = avatar.skin;
+    document.getElementById("avatarHair").style.background = avatar.hair;
+    document.getElementById("avatarShirt").style.background = avatar.shirt;
+    document.getElementById("avatarFace").textContent = avatar.face;
+    document.getElementById("avatarNameDisplay").textContent = avatar.name || "Your Coach";
+
+    if (message) document.getElementById("avatarMessage").textContent = message;
+
+    renderBadges();
+  }
+
+  function getFoodLog() {
+    return getData(FOOD_STORE, []);
+  }
+
+  function getCoachLog() {
+    return getData(COACH_STORE, []);
+  }
+
+  function renderBadges() {
+    const foods = getFoodLog();
+    const coach = getCoachLog();
+    const badges = [];
+
+    if (foods.length >= 1) badges.push("🍽️ First meal logged");
+    if (foods.length >= 10) badges.push("📚 10 foods logged");
+    if (coach.length >= 1) badges.push("🌱 First check-in");
+    if (coach.filter(e => e.type === "urge").length >= 3) badges.push("⏸️ Pause practiced");
+    if (coach.filter(e => e.type === "mood").length >= 3) badges.push("😊 Mood explorer");
+
+    document.getElementById("badges").innerHTML =
+      badges.map(badge => `<span class="badge">${badge}</span>`).join("");
+  }
+
+  function reaction(text, face = "😊") {
+    const avatar = getAvatar();
+    avatar.face = face;
+    setData(AVATAR_STORE, avatar);
+    renderAvatar(text);
+    return `<div class="reaction">${text}</div>`;
+  }
+
+  function goHome() {
+    document.getElementById("home").classList.remove("hidden");
+    document.getElementById("screen").classList.add("hidden");
+    renderAvatar();
+  }
+
+  function showScreen(html) {
+    document.getElementById("home").classList.add("hidden");
+    document.getElementById("screen").classList.remove("hidden");
+    content.innerHTML = html;
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, char => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+    }[char]));
+  }
+
+  function number(value) {
+    return Number(value || 0);
+  }
+
+  function openAvatarSettings() {
+    const avatar = getAvatar();
+
+    showScreen(`
+      <h2>Customize your avatar</h2>
+
+      <label>Name</label>
+      <input id="avatarName" value="${escapeHtml(avatar.name)}">
+
+      <label>Skin color</label>
+      <input id="avatarSkin" type="color" value="${avatar.skin}">
+
+      <label>Hair color</label>
+      <input id="avatarHairColor" type="color" value="${avatar.hair}">
+
+      <label>Shirt color</label>
+      <input id="avatarShirtColor" type="color" value="${avatar.shirt}">
+
+      <label>Expression</label>
+      <select id="avatarExpression">
+        ${["🙂", "😊", "😄", "😌", "😎", "🤗", "🌟"].map(face =>
+          `<option ${avatar.face === face ? "selected" : ""}>${face}</option>`
+        ).join("")}
+      </select>
+
+      <button onclick="saveAvatar()">Save avatar</button>
+    `);
+  }
+
+  function saveAvatar() {
+    setData(AVATAR_STORE, {
+      name: document.getElementById("avatarName").value.trim() || "Your Coach",
+      skin: document.getElementById("avatarSkin").value,
+      hair: document.getElementById("avatarHairColor").value,
+      shirt: document.getElementById("avatarShirtColor").value,
+      face: document.getElementById("avatarExpression").value
+    });
+
+    renderAvatar("Looking good! Your coach is ready. ✨");
+    goHome();
+  }
+
+  function openSettings() {
+    const key = localStorage.getItem(API_KEY_STORE) || "";
+
+    showScreen(`
+      <h2>USDA FoodData Central setup</h2>
+      <p class="small">Your API key is saved locally in this browser. You can still add manual foods without it.</p>
+
+      <label>USDA API key</label>
+      <input id="apiKey" value="${escapeHtml(key)}" placeholder="Paste your API key">
+
+      <button onclick="saveApiKey()">Save API key</button>
+      <button class="secondary" onclick="removeApiKey()">Remove API key</button>
+    `);
+  }
+
+  function saveApiKey() {
+    localStorage.setItem(API_KEY_STORE, document.getElementById("apiKey").value.trim());
+    alert("Saved! 🌟");
+  }
+
+  function removeApiKey() {
+    localStorage.removeItem(API_KEY_STORE);
+    openSettings();
+  }
+
+  function openFoodTracker() {
+    showScreen(`
+      <h2>Log food</h2>
+
+      <label>Meal</label>
+      <select id="mealType">
+        <option>Breakfast</option>
+        <option>Lunch</option>
+        <option>Dinner</option>
+        <option>Snack</option>
+      </select>
+
+      <label>Search USDA food data</label>
+      <input id="foodSearch" placeholder="Example: banana, oats, chicken breast">
+      <button onclick="searchFoods()">Search official foods</button>
+
+      <h2>Manual food entry</h2>
+      <label>Food name</label>
+      <input id="manualName" placeholder="Example: homemade sandwich">
+
+      <div class="grid">
+        <div><label>Calories</label><input id="calories" type="number" min="0"></div>
+        <div><label>Protein (g)</label><input id="protein" type="number" min="0"></div>
+        <div><label>Carbs (g)</label><input id="carbs" type="number" min="0"></div>
+        <div><label>Fat (g)</label><input id="fat" type="number" min="0"></div>
+        <div><label>Fiber (g)</label><input id="fiber" type="number" min="0"></div>
+        <div><label>Sodium (mg)</label><input id="sodium" type="number" min="0"></div>
+      </div>
+
+      <button onclick="saveManualFood()">Save manual entry</button>
+    `);
+  }
+
+  async function searchFoods() {
+    const key = localStorage.getItem(API_KEY_STORE);
+    const query = document.getElementById("foodSearch").value.trim();
+
+    if (!key) return alert("Add your USDA API key first, or use a manual food entry.");
+    if (!query) return alert("Enter a food to search.");
+
+    content.insertAdjacentHTML("beforeend", "<p id='searching'>Searching… 🔎</p>");
+
+    try {
+      const response = await fetch(
+        `https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${encodeURIComponent(key)}&query=${encodeURIComponent(query)}&pageSize=10`
+      );
+      const data = await response.json();
+      document.getElementById("searching")?.remove();
+
+      const foods = data.foods || [];
+
+      content.insertAdjacentHTML("beforeend", `
+        <h2>Results</h2>
+        ${foods.map(food => `
+          <div class="food-row">
+            <strong>${escapeHtml(food.description)}</strong>
+            <div class="small">${escapeHtml(food.dataType || "")}</div>
+            <button onclick="loadFood(${food.fdcId}, '${String(food.description).replace(/'/g, "\\'")}')">
+              Select
+            </button>
+          </div>
+        `).join("") || "<p>No foods found.</p>"}
+      `);
+    } catch {
+      document.getElementById("searching")?.remove();
+      alert("Search did not work. Check your key and internet connection.");
+    }
+  }
+
+  async function loadFood(id, name) {
+    const key = localStorage.getItem(API_KEY_STORE);
+    showScreen("<h2>Loading food details…</h2>");
+
+    try {
+      const response = await fetch(
+        `https://api.nal.usda.gov/fdc/v1/food/${id}?api_key=${encodeURIComponent(key)}`
+      );
+      const food = await response.json();
+
+      const nutrients = {};
+      const wanted = {
+        calories: "Energy",
+        protein: "Protein",
+        carbs: "Carbohydrate, by difference",
+        fat: "Total lipid (fat)",
+        fiber: "Fiber, total dietary",
+        sodium: "Sodium, Na",
+        calcium: "Calcium, Ca",
+        iron: "Iron, Fe",
+        potassium: "Potassium, K",
+        vitaminD: "Vitamin D (D2 + D3)",
+        vitaminB12: "Vitamin B-12",
+        folate: "Folate, total"
+      };
+
+      Object.entries(wanted).forEach(([key, nutrientName]) => {
+        const nutrient = (food.foodNutrients || []).find(item =>
+          (item.nutrient?.name || item.nutrientName || "").toLowerCase() === nutrientName.toLowerCase()
+        );
+        nutrients[key] = number(nutrient?.amount ?? nutrient?.value);
+      });
+
+      showScreen(`
+        <h2>${escapeHtml(name)}</h2>
+        <p class="small">Enter the amount you ate. Nutrients are calculated from the official USDA record.</p>
+
+        <label>Meal</label>
+        <select id="selectedMeal">
+          <option>Breakfast</option><option>Lunch</option><option>Dinner</option><option>Snack</option>
+        </select>
+
+        <label>Amount eaten (grams)</label>
+        <input id="grams" type="number" min="1" value="100">
+
+        <p class="small">
+          Per 100g: ${nutrients.calories.toFixed(0)} kcal ·
+          P ${nutrients.protein.toFixed(1)}g ·
+          C ${nutrients.carbs.toFixed(1)}g ·
+          F ${nutrients.fat.toFixed(1)}g
+        </p>
+
+        <button onclick='saveUSDAFood(${JSON.stringify({ name, nutrients }).replace(/'/g, "&#039;")})'>
+          Save this food
+        </button>
+      `);
+    } catch {
+      showScreen("<p>Unable to load this food. Try manual entry instead.</p>");
+    }
+  }
+
+  function saveUSDAFood(food) {
+    const grams = number(document.getElementById("grams").value);
+    const meal = document.getElementById("selectedMeal").value;
+    if (grams <= 0) return alert("Enter grams eaten.");
+
+    const factor = grams / 100;
+    const nutrients = {};
+    Object.entries(food.nutrients).forEach(([key, value]) => nutrients[key] = number(value) * factor);
+
+    const log = getFoodLog();
+    log.unshift({
+      id: Date.now(),
+      date: today(),
+      meal,
+      name: food.name,
+      grams,
+      nutrients,
+      source: "USDA"
+    });
+    setData(FOOD_STORE, log);
+
+    showDailySummary();
+    renderAvatar("Meal logged! You are building awareness, not chasing perfection. 🍽️", "😄");
+  }
+
+  function saveManualFood() {
+    const name = document.getElementById("manualName").value.trim();
+    if (!name) return alert("Enter a food name.");
+
+    const log = getFoodLog();
+    log.unshift({
+      id: Date.now(),
+      date: today(),
+      meal: document.getElementById("mealType").value,
+      name,
+      grams: 0,
+      source: "Manual",
+      nutrients: {
+        calories: number(document.getElementById("calories").value),
+        protein: number(document.getElementById("protein").value),
+        carbs: number(document.getElementById("carbs").value),
+        fat: number(document.getElementById("fat").value),
+        fiber: number(document.getElementById("fiber").value),
+        sodium: number(document.getElementById("sodium").value),
+        calcium: 0, iron: 0, potassium: 0, vitaminD: 0, vitaminB12: 0, folate: 0
+      }
+    });
+    setData(FOOD_STORE, log);
+
+    showDailySummary();
+    renderAvatar("Nice job logging your food! 🍽️✨", "😊");
+  }
+
+  function dailyEntries() {
+    return getFoodLog().filter(entry => entry.date === today());
+  }
+
+  function totals(entries) {
+    const total = {
+      calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sodium: 0,
+      calcium: 0, iron: 0, potassium: 0, vitaminD: 0, vitaminB12: 0, folate: 0
+    };
+
+    entries.forEach(entry => {
+      Object.keys(total).forEach(key => total[key] += number(entry.nutrients?.[key]));
+    });
+
+    return total;
+  }
+
+  function showDailySummary() {
+    const t = totals(dailyEntries());
+
+    showScreen(`
+      <h2>Today’s nutrition summary</h2>
+      ${reaction("Every entry is useful information—not a grade. 🌱", "😊")}
+      <div class="card totals">
+Calories: ${t.calories.toFixed(0)} kcal
+Protein: ${t.protein.toFixed(1)} g
+Carbohydrates: ${t.carbs.toFixed(1)} g
+Fat: ${t.fat.toFixed(1)} g
+Fiber: ${t.fiber.toFixed(1)} g
+
+Sodium: ${t.sodium.toFixed(0)} mg
+Calcium: ${t.calcium.toFixed(0)} mg
+Iron: ${t.iron.toFixed(1)} mg
+Potassium: ${t.potassium.toFixed(0)} mg
+Vitamin D: ${t.vitaminD.toFixed(1)} µg
+Vitamin B12: ${t.vitaminB12.toFixed(1)} µg
+Folate: ${t.folate.toFixed(0)} µg
+      </div>
+      <button onclick="openFoodTracker()">🍽️ Log another food</button>
+      <button class="secondary" onclick="showFoodHistory()">📖 View diary</button>
+    `);
+  }
+
+  function showFoodHistory() {
+    const meals = ["Breakfast", "Lunch", "Dinner", "Snack"];
+    const entries = dailyEntries();
+
+    showScreen(`
+      <h2>Today’s food diary</h2>
+      ${meals.map(meal => `
+        <h3>${meal}</h3>
+        ${
+          entries.filter(entry => entry.meal === meal).map(entry => `
+            <div class="entry-row">
+              <strong>${escapeHtml(entry.name)}</strong>
+              <div class="small">
+                ${entry.grams ? entry.grams + "g · " : ""}
+                ${entry.nutrients.calories.toFixed(0)} kcal ·
+                P ${entry.nutrients.protein.toFixed(1)}g ·
+                C ${entry.nutrients.carbs.toFixed(1)}g ·
+                F ${entry.nutrients.fat.toFixed(1)}g
+              </div>
+              <button class="danger" onclick="deleteFood(${entry.id})">Delete</button>
+            </div>
+          `).join("") || "<p class='small'>Nothing logged.</p>"
+        }
+      `).join("")}
+      <button onclick="openFoodTracker()">🍽️ Log food</button>
+    `);
+  }
+
+  function deleteFood(id) {
+    setData(FOOD_STORE, getFoodLog().filter(entry => entry.id !== id));
+    showFoodHistory();
+  }
+
+  function openCoach() {
+    showScreen(`
+      <h2>Kindness Coach</h2>
+      <div class="chat" id="chat"></div>
+      <div id="coachInput"></div>
+    `);
+  }
+
+  function chatMessage(text, who = "coach") {
+    const message = document.createElement("div");
+    message.className = `message ${who}`;
+    message.textContent = text;
+    document.getElementById("chat").appendChild(message);
+  }
+
+  function coachQuestion(question, placeholder, next) {
+    chatMessage(question);
+    document.getElementById("coachInput").innerHTML = `
+      <textarea id="coachAnswer" placeholder="${placeholder}"></textarea>
+      <button onclick="submitCoachAnswer()">Continue</button>
+    `;
+
+    window.submitCoachAnswer = () => {
+      const answer = document.getElementById("coachAnswer").value.trim();
+      if (!answer) return;
+      chatMessage(answer, "you");
+      document.getElementById("coachInput").innerHTML = "";
+      next(answer);
+    };
+  }
+
+  function startMoodCheck() {
+    const entry = { type: "mood", date: new Date().toLocaleString() };
+
+    showScreen(`
+      <h2>How are you feeling?</h2>
+      <div class="moods">
+        ${["😞", "😕", "😐", "🙂", "😄"].map((emoji, index) =>
+          `<button onclick="saveMood('${emoji}', ${index + 1})">${emoji}</button>`
+        ).join("")}
+      </div>
+      <p class="small">Choose the closest fit. There is no wrong answer.</p>
+    `);
+  }
+
+  function saveMood(emoji, rating) {
+    const entries = getCoachLog();
+    entries.unshift({ type: "mood", emoji, rating, date: new Date().toLocaleString() });
+    setData(COACH_STORE, entries);
+
+    showScreen(`
+      <h2>Mood saved ${emoji}</h2>
+      ${reaction("Thank you for checking in with yourself. That is a real act of care. 🌱", emoji)}
+      <button onclick="suggestActivity()">🏠 Suggest a gentle activity</button>
+    `);
+  }
+
+  function startUrge() {
+    const entry = { type: "urge", date: new Date().toLocaleString() };
+    openCoach();
+
+    coachQuestion("You noticed the urge. How strong is it from 1–10?", "Example: 8", urge => {
+      entry.urge = urge;
+
+      coachQuestion(
+        "What happened just before the urge? Hunger, stress, boredom, loneliness, exhaustion, restriction, or something else?",
+        "A few words is enough.",
+        trigger => {
+          entry.trigger = trigger;
+
+          chatMessage(
+            "Take a 10-minute pause. Leave the food area, make a drink, walk, shower, stretch, or do one small task. You are not forbidden from eating—you are creating space to choose."
+          );
+
+          coachQuestion(
+            "What is one kind next step you can take now?",
+            "Example: Make a balanced snack and eat at the table.",
+            nextStep => {
+              entry.nextStep = nextStep;
+              const entries = getCoachLog();
+              entries.unshift(entry);
+              setData(COACH_STORE, entries);
+
+              chatMessage("You paused and chose a next step. That is progress—not perfection. ⏸️🌟");
+              renderAvatar("You created a pause. I’m proud of you. ⏸️🌟", "🤗");
+            }
+          );
+        }
+      );
+    });
+  }
+
+  function startThought() {
+    const entry = { type: "self-criticism", date: new Date().toLocaleString() };
+    openCoach();
+
+    coachQuestion("What harsh thought are you telling yourself?", "Example: I always ruin everything.", thought => {
+      entry.thought = thought;
+      chatMessage("That thought may feel convincing, but it is not automatically a fact.");
+
+      coachQuestion(
+        "What would you say to a friend who said that about themselves?",
+        "Be realistic and kind.",
+        response => {
+          entry.response = response;
+
+          coachQuestion(
+            "What is one small respectful action you can take in the next 10 minutes?",
+            "Example: make food, shower, walk, or send a message.",
+            nextStep => {
+              entry.nextStep = nextStep;
+              const entries = getCoachLog();
+              entries.unshift(entry);
+              setData(COACH_STORE, entries);
+
+              chatMessage("You deserve the kindness you would give a friend. 💛");
+              renderAvatar("You chose kindness over self-attack. That takes strength. 💛", "😊");
+            }
+          );
+        }
+      );
+    });
+  }
+
+  function suggestActivity() {
+    const activities = [
+      "Take a 10-minute walk inside or outside. 🚶",
+      "Put on one song and stretch, dance, or move until it ends. 🎵",
+      "Take a shower or wash your face slowly. 🚿",
+      "Make tea, coffee, or water and drink it away from the kitchen. ☕",
+      "Tidy one small surface for five minutes. ✨",
+      "Sit by a window for ten minutes without your phone. 🌤️",
+      "Write three sentences about what you are feeling. 📝",
+      "Fold laundry or put away five items. 🧺",
+      "Take five slow breaths: in for 4, out for 6. 🌬️",
+      "Text someone: “Hi, I’m having a difficult moment. Can you say hello?” 💬",
+      "Lie down with your feet up against a wall for five minutes. 🛋️",
+      "Make your bed or straighten the blankets. 🛏️"
+    ];
+
+    const activity = activities[Math.floor(Math.random() * activities.length)];
+
+    showScreen(`
+      <h2>Try this gentle reset</h2>
+      <div class="card"><strong>${activity}</strong></div>
+      ${reaction("You do not need to fix everything right now—just try one small thing. 🌱", "😌")}
+      <button onclick="suggestActivity()">Suggest another activity</button>
+    `);
+  }
+
+  function exportBackup() {
+    const backup = {
+      exportedAt: new Date().toLocaleString(),
+      foodLog: getFoodLog(),
+      coachLog: getCoachLog(),
+      avatar: getAvatar()
+    };
+
+    const blob = new Blob([JSON.stringify(backup, null, 2)], {
+      type: "application/json"
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "food-kindness-coach-backup.json";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  renderAvatar();
+</script>
+</body>
+</html>
